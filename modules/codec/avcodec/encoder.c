@@ -796,6 +796,26 @@ int OpenEncoder( vlc_object_t *p_this )
             goto error;
         }
     }
+    else if( i_codec_id == CODEC_ID_MPEG2VIDEO )
+    {
+        switch ( p_context->level )
+        {
+        case 9:
+            p_enc->fmt_out.video.i_max_bitrate = 4000000; /* low */
+            break;
+        case 8:
+            p_enc->fmt_out.video.i_max_bitrate = 15000000; /* main */
+            break;
+        case 6:
+            p_enc->fmt_out.video.i_max_bitrate = 60000000; /* high-1440 */
+            break;
+        default:
+        case 4:
+            p_enc->fmt_out.video.i_max_bitrate = 80000000; /* high */
+            break;
+        }
+        p_enc->fmt_out.video.i_cpb_buffer = p_context->rc_buffer_size;
+    }
 
     msg_Dbg( p_enc, "found encoder %s", psz_namecodec );
 
@@ -999,6 +1019,8 @@ static block_t *EncodeVideo( encoder_t *p_enc, picture_t *p_pict )
              * correctly */
             p_block->i_dts = p_block->i_pts = p_pict->date;
         }
+
+        /* p_block->i_delay = FIXME */
 
         switch ( p_sys->p_context->coded_frame->pict_type )
         {
