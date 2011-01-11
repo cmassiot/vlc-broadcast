@@ -109,6 +109,7 @@ struct block_t
     mtime_t     i_pts;
     mtime_t     i_dts;
     mtime_t     i_length;
+    mtime_t     i_delay;
 
     unsigned    i_nb_samples; /* Used for audio */
     int         i_rate;
