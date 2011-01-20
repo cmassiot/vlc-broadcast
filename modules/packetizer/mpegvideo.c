@@ -615,6 +615,23 @@ static block_t *ParseMPEGBlock( decoder_t *p_dec, block_t *p_frag )
 
             if( p_frag->i_buffer >= 10 )
             {
+                switch ( p_frag->p_buffer[4] & 0xf ) /* level */
+                {
+                case 9:
+                    p_dec->fmt_out.video.i_max_bitrate = 4000000; /* low */
+                    break;
+                case 8:
+                    p_dec->fmt_out.video.i_max_bitrate = 15000000; /* main */
+                    break;
+                case 6:
+                    p_dec->fmt_out.video.i_max_bitrate = 60000000; /* high-1440 */
+                    break;
+                default:
+                case 4:
+                    p_dec->fmt_out.video.i_max_bitrate = 80000000; /* high */
+                    break;
+                }
+
                 p_sys->b_seq_progressive =
                     p_frag->p_buffer[5]&0x08 ? true : false;
                 p_sys->b_low_delay =
