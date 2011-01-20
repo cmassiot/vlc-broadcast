@@ -1,13 +1,14 @@
 /*****************************************************************************
  * h264.c: h264/avc video packetizer
  *****************************************************************************
- * Copyright (C) 2001, 2002, 2006 the VideoLAN team
+ * Copyright (C) 2001, 2002, 2006, 2011 the VideoLAN team
  * $Id$
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
  *          Eric Petit <titer@videolan.org>
  *          Gildas Bazin <gbazin@videolan.org>
  *          Derk-Jan Hartman <hartman at videolan dot org>
+ *          Christophe Massiot <massiot@via.ecp.fr>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -43,6 +44,8 @@
 #include <vlc_bits.h>
 #include "../codec/cc.h"
 #include "packetizer_helper.h"
+
+#define DEFAULT_DELAY 500 /* ms */
 
 /*****************************************************************************
  * Module descriptor
@@ -112,6 +115,9 @@ struct decoder_sys_t
     int i_pic_order_cnt_type;
     int i_delta_pic_order_always_zero_flag;
     int i_log2_max_pic_order_cnt_lsb;
+    uint32_t i_time_scale;
+    int i_initial_cpb_removal_delay_length;
+    mtime_t i_cpb_length, i_cpb_leakage;
 
     /* Value from Picture Parameter Set */
     int i_pic_order_present_flag;
@@ -122,6 +128,7 @@ struct decoder_sys_t
     /* */
     mtime_t i_frame_pts;
     mtime_t i_frame_dts;
+    mtime_t i_cpb_delay;
 
     /* */
     uint32_t i_cc_flags;
@@ -233,6 +240,7 @@ static int Open( vlc_object_t *p_this )
 
     p_sys->i_frame_dts = VLC_TS_INVALID;
     p_sys->i_frame_pts = VLC_TS_INVALID;
+    p_sys->i_cpb_delay = -1;
 
     /* Setup properties */
     es_format_Copy( &p_dec->fmt_out, &p_dec->fmt_in );
@@ -770,6 +778,32 @@ static block_t *OutputPicture( decoder_t *p_dec )
     }
     p_pic->i_dts = p_sys->i_frame_dts;
     p_pic->i_pts = p_sys->i_frame_pts;
+    if ( p_sys->i_cpb_delay != -1 && p_dec->fmt_out.i_bitrate )
+    {
+        mtime_t i_used = p_pic->i_buffer * INT64_C(8000000)
+                          / p_dec->fmt_out.i_bitrate;
+
+        p_sys->i_cpb_delay -= i_used;
+        p_sys->i_cpb_delay += p_sys->i_cpb_leakage;
+
+        if ( p_sys->i_cpb_delay < 0 )
+        {
+            msg_Warn( p_dec, "CPB underflow %"PRId64, -p_sys->i_cpb_delay );
+            p_sys->i_cpb_delay = 0;
+        }
+        if ( p_sys->i_cpb_delay > p_sys->i_cpb_length )
+        {
+#if 0
+            msg_Warn( p_dec, "CPB overflow %"PRId64,
+                      p_sys->i_cpb_delay - p_sys->i_cpb_length );
+#endif
+            p_sys->i_cpb_delay = p_sys->i_cpb_length;
+        }
+        p_pic->i_delay = p_sys->i_cpb_delay;
+    }
+    else
+        p_pic->i_delay = DEFAULT_DELAY * 1000;
+
     p_pic->i_length = 0;    /* FIXME */
     p_pic->i_flags |= p_sys->slice.i_frame_type;
     p_pic->i_flags &= ~BLOCK_FLAG_PRIVATE_AUD;
@@ -818,6 +852,51 @@ static void PutSPS( decoder_t *p_dec, block_t *p_frag )
     /* Skip constraint_set0123, reserved(4) */
     bs_skip( &s, 1+1+1+1 + 4 );
     p_dec->fmt_out.i_level = bs_read( &s, 8 );
+
+    switch ( p_dec->fmt_out.i_level )
+    {
+    case 10:
+        p_dec->fmt_out.video.i_max_bitrate = 64000;
+        break;
+    case 11:
+        p_dec->fmt_out.video.i_max_bitrate = 192000;
+        break;
+    case 12:
+        p_dec->fmt_out.video.i_max_bitrate = 384000;
+        break;
+    case 13:
+        p_dec->fmt_out.video.i_max_bitrate = 768000;
+        break;
+    case 20:
+        p_dec->fmt_out.video.i_max_bitrate = 2000000;
+        break;
+    case 21:
+    case 22:
+        p_dec->fmt_out.video.i_max_bitrate = 4000000;
+        break;
+    case 30:
+        p_dec->fmt_out.video.i_max_bitrate = 10000000;
+        break;
+    case 31:
+        p_dec->fmt_out.video.i_max_bitrate = 14000000;
+        break;
+    case 32:
+    case 40:
+        p_dec->fmt_out.video.i_max_bitrate = 20000000;
+        break;
+    case 41:
+    case 42:
+        p_dec->fmt_out.video.i_max_bitrate = 50000000;
+        break;
+    case 50:
+        p_dec->fmt_out.video.i_max_bitrate = 135000000;
+        break;
+    default:
+    case 51:
+        p_dec->fmt_out.video.i_max_bitrate = 240000000;
+        break;
+    }
+
     /* sps id */
     i_sps_id = bs_read_ue( &s );
     if( i_sps_id >= SPS_MAX )
@@ -973,6 +1052,10 @@ static void PutSPS( decoder_t *p_dec, block_t *p_frag )
                 h = 0;
             }
 
+#if 0
+            /* Do not set aspect ratio ; same remark as mpegvideo.c */
+            /* Also FIXME: the picture aspect ratio should take into account
+             * horizontal overscan. */
             if( w != 0 && h != 0 )
             {
                 p_dec->fmt_out.video.i_sar_num = w;
@@ -982,6 +1065,69 @@ static void PutSPS( decoder_t *p_dec, block_t *p_frag )
             {
                 p_dec->fmt_out.video.i_sar_num = 1;
                 p_dec->fmt_out.video.i_sar_den = 1;
+            }
+#endif
+        }
+
+        if ( bs_read( &s, 1 ) ) /* overscan_info_present_flag */
+        {
+            i_tmp = bs_read( &s, 1 );
+            //msg_Err( p_dec, "overscan present: %d", i_tmp );
+        }
+        if ( bs_read( &s, 1 ) ) /* video_signal_type_present_flag */
+        {
+            bs_skip( &s, 4 );
+            if ( bs_read( &s, 1 ) ) /* colour_description_present_flag */
+                bs_skip( &s, 24 );
+        }
+        if ( bs_read( &s, 1 ) ) /* chroma_loc_info_present_flag */
+        {
+            bs_read_ue( &s );
+            bs_read_ue( &s );
+        }
+        if ( bs_read( &s, 1 ) ) /* timing_info_present_flag */
+        {
+            uint32_t i_num_units_in_ticks = bs_read( &s, 32 );
+            p_sys->i_time_scale = bs_read( &s, 32 );
+            if ( bs_read( &s, 1 ) ) /* fixed_frame_rate */
+            {
+                vlc_ureduce( &p_dec->fmt_out.video.i_frame_rate,
+                             &p_dec->fmt_out.video.i_frame_rate_base,
+                             p_sys->i_time_scale, i_num_units_in_ticks * 2, 0 );
+                if ( p_dec->fmt_out.video.i_frame_rate )
+                    p_sys->i_cpb_leakage = INT64_C(1000000)
+                                 * p_dec->fmt_out.video.i_frame_rate_base
+                                 / p_dec->fmt_out.video.i_frame_rate;
+            }
+        }
+        if ( bs_read( &s, 1 ) ) /* nal_hrd_parameters_present_flag */
+        {
+            uint8_t i_bit_rate_scale, i_cpb_size_scale;
+            uint32_t i_bit_rate, i_cpb_size;
+            unsigned int i_cpb_minus1 = bs_read_ue( &s );
+            i_bit_rate_scale = bs_read( &s, 4 );
+            i_cpb_size_scale = bs_read( &s, 4 );
+            i_bit_rate = bs_read_ue( &s );
+            i_cpb_size = bs_read_ue( &s );
+            p_dec->fmt_out.i_bitrate
+                = (i_bit_rate + 1) << (6 + i_bit_rate_scale);
+
+            if ( bs_read( &s, 1 ) ) /* cbr_flag */
+            {
+                p_dec->fmt_out.video.i_cpb_buffer
+                    = (i_cpb_size + 1) << (4 + i_cpb_size_scale);
+                p_sys->i_cpb_length = p_dec->fmt_out.video.i_cpb_buffer
+                    * INT64_C(1000000) / p_dec->fmt_out.i_bitrate;
+
+                while ( i_cpb_minus1 )
+                {
+                    bs_read_ue( &s );
+                    bs_read_ue( &s );
+                    bs_skip( &s, 1 );
+                    i_cpb_minus1--;
+                }
+
+                p_sys->i_initial_cpb_removal_delay_length = bs_read( &s, 5 );
             }
         }
     }
@@ -1191,6 +1337,17 @@ static void ParseSei( decoder_t *p_dec, block_t *p_frag )
             {
                 cc_Extract( &p_sys->cc_next, true, &p_t35[3], i_t35 - 3 );
             }
+        }
+
+        /* SEI buffering period */
+        if( i_type == 0 && p_sys->i_cpb_delay == -1 && p_sys->i_cpb_length
+             && p_sys->i_time_scale && p_dec->fmt_out.video.i_frame_rate )
+        {
+            bs_t s;
+            bs_init( &s, &pb_dec[i_used], i_dec - i_used );
+            bs_read_ue( &s );
+            p_sys->i_cpb_delay = 100 * (mtime_t)bs_read( &s,
+                   p_sys->i_initial_cpb_removal_delay_length + 1 ) / 9;
         }
 
         /* Look for SEI recovery point */
