@@ -1,13 +1,14 @@
 /*****************************************************************************
  * mpegvideo.c: parse and packetize an MPEG1/2 video stream
  *****************************************************************************
- * Copyright (C) 2001-2006 the VideoLAN team
+ * Copyright (C) 2001-2006, 2011 the VideoLAN team
  * $Id$
  *
  * Authors: Laurent Aimar <fenrir@via.ecp.fr>
  *          Eric Petit <titer@videolan.org>
  *          Gildas Bazin <gbazin@videolan.org>
  *          Jean-Paul Saman <jpsaman #_at_# m2x dot nl>
+ *          Christophe Massiot <massiot@via.ecp.fr>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -59,6 +60,8 @@
     "sync on the next full frame. This flags instructs the packetizer " \
     "to sync on the first Intra Frame found.")
 
+#define DEFAULT_DELAY   500 /* ms */
+
 /*****************************************************************************
  * Module descriptor
  *****************************************************************************/
@@ -98,6 +101,7 @@ struct decoder_sys_t
     bool b_frame_slice;
     mtime_t i_pts;
     mtime_t i_dts;
+    uint16_t i_vbv_delay;
 
     /* Sequence properties */
     int         i_frame_rate;
@@ -180,6 +184,7 @@ static int Open( vlc_object_t *p_this )
     p_sys->b_frame_slice = false;
 
     p_sys->i_dts = p_sys->i_pts = VLC_TS_INVALID;
+    p_sys->i_vbv_delay = 0xffff;
 
     p_sys->i_frame_rate = 1;
     p_sys->i_frame_rate_base = 1;
@@ -459,6 +464,11 @@ static block_t *ParseMPEGBlock( decoder_t *p_dec, block_t *p_frag )
             p_pic->i_pts = VLC_TS_INVALID;
         }
 
+        if ( p_sys->i_vbv_delay != 0xffff && p_dec->fmt_out.i_bitrate )
+            p_pic->i_delay = p_sys->i_vbv_delay * 100 / 9;
+        else
+            p_pic->i_delay = DEFAULT_DELAY * 1000;
+
         switch ( p_sys->i_picture_type )
         {
         case 0x01:
@@ -527,7 +537,7 @@ static block_t *ParseMPEGBlock( decoder_t *p_dec, block_t *p_frag )
             p_sys->i_seq_old = 0;
         }
     }
-    else if( p_frag->p_buffer[3] == 0xb3 && p_frag->i_buffer >= 8 )
+    else if( p_frag->p_buffer[3] == 0xb3 && p_frag->i_buffer >= 12 )
     {
         /* Sequence header code */
         static const int code_to_frame_rate[16][2] =
@@ -563,6 +573,14 @@ static block_t *ParseMPEGBlock( decoder_t *p_dec, block_t *p_frag )
 
         p_dec->fmt_out.video.i_frame_rate = p_sys->i_frame_rate;
         p_dec->fmt_out.video.i_frame_rate_base = p_sys->i_frame_rate_base;
+
+        p_dec->fmt_out.i_bitrate = ((p_frag->p_buffer[8] << 10)
+                                  | (p_frag->p_buffer[9] << 2)
+                                  | (p_frag->p_buffer[10] >> 6)) * 400;
+
+        p_dec->fmt_out.video.i_cpb_buffer
+            = (((p_frag->p_buffer[10] & 0x1f) << 5)
+              | (p_frag->p_buffer[11] >> 3)) * 16 * 1024;
 
         p_sys->b_seq_progressive = true;
         p_sys->b_low_delay = true;
@@ -601,6 +619,11 @@ static block_t *ParseMPEGBlock( decoder_t *p_dec, block_t *p_frag )
                     p_frag->p_buffer[5]&0x08 ? true : false;
                 p_sys->b_low_delay =
                     p_frag->p_buffer[9]&0x80 ? true : false;
+                p_dec->fmt_out.i_bitrate
+                    += ((((p_frag->p_buffer[6] & 0x1f) << 7)
+                        | (p_frag->p_buffer[7] >> 1)) << 18) * 400;
+                p_dec->fmt_out.video.i_cpb_buffer
+                    += (p_frag->p_buffer[8] << 10) * 16 * 1024;
             }
 
             /* Do not set aspect ratio : in case we're transcoding,
@@ -638,11 +661,14 @@ static block_t *ParseMPEGBlock( decoder_t *p_dec, block_t *p_frag )
         /* Picture start code */
         p_sys->i_seq_old++;
 
-        if( p_frag->i_buffer >= 6 )
+        if( p_frag->i_buffer >= 8 )
         {
             p_sys->i_temporal_ref =
                 ( p_frag->p_buffer[4] << 2 )|(p_frag->p_buffer[5] >> 6);
             p_sys->i_picture_type = ( p_frag->p_buffer[5] >> 3 ) & 0x03;
+            p_sys->i_vbv_delay = ((p_frag->p_buffer[5] & 0x7) << 13)
+                                  | (p_frag->p_buffer[6] << 5)
+                                  | (p_frag->p_buffer[7] >> 3);
         }
 
         p_sys->i_dts = p_frag->i_dts;
