@@ -382,6 +382,9 @@ static void Close( vlc_object_t * );
 #define LOOKAHEAD_LONGTEXT N_("Framecount to use on frametype lookahead. " \
     "Currently default can cause sync-issues on unmuxable output, like rtsp-output without ts-mux" )
 
+#define SYNC_LOOKAHEAD_TEXT N_("Framecount to use to synchronize lookahead between threads")
+#define SYNC_LOOKAHEAD_LONGTEXT N_( "By default (-1) it is automatically calculated. 0 disables sync lookahead." )
+
 #define HRD_TEXT N_("HRD-timing information")
 #define HRD_LONGTEXT N_("HRD-timing information")
 
@@ -623,6 +626,10 @@ vlc_module_begin ()
                  LOOKAHEAD_LONGTEXT, false )
         change_integer_range( 0, 60 )
 
+    add_integer( SOUT_CFG_PREFIX "sync-lookahead", -1, SYNC_LOOKAHEAD_TEXT,
+                 SYNC_LOOKAHEAD_LONGTEXT, false );
+        change_integer_range( -1, 60 )
+
     add_bool( SOUT_CFG_PREFIX "intra-refresh", false, INTRAREFRESH_TEXT,
               INTRAREFRESH_LONGTEXT, false )
 
@@ -699,7 +706,8 @@ static const char *const ppsz_sout_options[] = {
     "qpmin", "quiet", "ratetol", "ref", "scenecut",
     "sps-id", "ssim", "stats", "subme", "trellis",
     "verbose", "vbv-bufsize", "vbv-init", "vbv-maxrate", "weightb", "weightp",
-    "aq-mode", "aq-strength", "psy-rd", "psy", "profile", "lookahead", "slices",
+    "aq-mode", "aq-strength", "psy-rd", "psy", "profile", "lookahead",
+    "sync-lookahead", "slices",
     "slice-max-size", "slice-max-mbs", "intra-refresh", "mbtree", "hrd",
     "tune","preset", "opengop", NULL
 };
@@ -1252,6 +1260,11 @@ static int  Open ( vlc_object_t *p_this )
        p_sys->param.rc.i_lookahead = var_GetInteger( p_enc, SOUT_CFG_PREFIX "lookahead" );
     }
 
+    if( var_GetInteger( p_enc, SOUT_CFG_PREFIX "sync-lookahead" ) != -1 )
+    {
+       p_sys->param.i_sync_lookahead = var_GetInteger( p_enc, SOUT_CFG_PREFIX "sync-lookahead" );
+    }
+
     /* We don't want repeated headers, we repeat p_extra ourself if needed */
     p_sys->param.b_repeat_headers = 0;
 
@@ -1302,6 +1315,51 @@ static int  Open ( vlc_object_t *p_this )
     }
 
     p_enc->fmt_out.i_extra = i_extra;
+    p_enc->fmt_out.video.i_cpb_buffer = p_sys->param.rc.i_vbv_buffer_size
+                                         * 1000;
+    switch ( p_sys->param.i_level_idc )
+    {
+    case 10:
+        p_enc->fmt_out.video.i_max_bitrate = 64000;
+        break;
+    case 11:
+        p_enc->fmt_out.video.i_max_bitrate = 192000;
+        break;
+    case 12:
+        p_enc->fmt_out.video.i_max_bitrate = 384000;
+        break;
+    case 13:
+        p_enc->fmt_out.video.i_max_bitrate = 768000;
+        break;
+    case 20:
+        p_enc->fmt_out.video.i_max_bitrate = 2000000;
+        break;
+    case 21:
+    case 22:
+        p_enc->fmt_out.video.i_max_bitrate = 4000000;
+        break;
+    case 30:
+        p_enc->fmt_out.video.i_max_bitrate = 10000000;
+        break;
+    case 31:
+        p_enc->fmt_out.video.i_max_bitrate = 14000000;
+        break;
+    case 32:
+    case 40:
+        p_enc->fmt_out.video.i_max_bitrate = 20000000;
+        break;
+    case 41:
+    case 42:
+        p_enc->fmt_out.video.i_max_bitrate = 50000000;
+        break;
+    case 50:
+        p_enc->fmt_out.video.i_max_bitrate = 135000000;
+        break;
+    default:
+    case 51:
+        p_enc->fmt_out.video.i_max_bitrate = 240000000;
+        break;
+    }
 
     return VLC_SUCCESS;
 }
@@ -1390,6 +1448,8 @@ static block_t *Encode( encoder_t *p_enc, picture_t *p_pict )
     /* scale pts-values back*/
     p_block->i_pts = pic.i_pts + p_sys->i_initial_delay;
     p_block->i_dts = pic.i_dts + p_sys->i_initial_delay;
+
+    /* p_block->i_delay = FIXME */
 
     return p_block;
 }
