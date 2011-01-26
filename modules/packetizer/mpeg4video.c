@@ -1,12 +1,13 @@
 /*****************************************************************************
  * mpeg4video.c: mpeg 4 video packetizer
  *****************************************************************************
- * Copyright (C) 2001-2006 the VideoLAN team
+ * Copyright (C) 2001-2006, 2011 the VideoLAN team
  * $Id$
  *
  * Authors: Gildas Bazin <gbazin@videolan.org>
  *          Laurent Aimar <fenrir@via.ecp.fr>
  *          Eric Petit <titer@videolan.org>
+ *          Christophe Massiot <massiot@via.ecp.fr>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -40,6 +41,8 @@
 #include <vlc_bits.h>
 #include <vlc_block_helper.h>
 #include "packetizer_helper.h"
+
+#define DEFAULT_DELAY 500 /* ms */
 
 /*****************************************************************************
  * Module descriptor
@@ -75,6 +78,7 @@ struct decoder_sys_t
     mtime_t i_time_ref;
     mtime_t i_last_time;
     mtime_t i_last_timeincr;
+    unsigned int i_vbv_occupancy;
 
     unsigned int i_flags;
 
@@ -328,6 +332,14 @@ static block_t *ParseMPEGBlock( decoder_t *p_dec, block_t *p_frag )
         p_pic->i_flags = p_sys->i_flags;
         p_pic->i_pts = p_sys->i_interpolated_pts;
         p_pic->i_dts = p_sys->i_interpolated_dts;
+        if ( p_dec->fmt_out.video.i_cpb_buffer && p_dec->fmt_out.i_bitrate )
+        {
+            mtime_t i_cpb_delay = p_sys->i_vbv_occupancy * INT64_C(1000000)
+                                   / p_dec->fmt_out.i_bitrate;
+            p_pic->i_delay = i_cpb_delay;
+        }
+        else
+            p_pic->i_delay = DEFAULT_DELAY * 1000;
 
         /* Reset context */
         p_sys->p_frame = NULL;
@@ -387,15 +399,24 @@ static int ParseVOL( decoder_t *p_dec, es_format_t *fmt,
         i_chroma_format = bs_read( &s, 2 );
         i_low_delay = bs_read1( &s );
 
-        if( bs_read1( &s ) )
+        if( bs_read1( &s ) ) /* vbv parameters */
         {
-            bs_skip( &s, 16 );
-            bs_skip( &s, 16 );
-            bs_skip( &s, 16 );
-            bs_skip( &s, 3 );
-            bs_skip( &s, 11 );
+            unsigned int i_bitrate, i_vbv_buffer_size, i_vbv_occupancy;
+            i_bitrate = bs_read( &s, 15 ) << 15;
             bs_skip( &s, 1 );
-            bs_skip( &s, 16 );
+            i_bitrate += bs_read( &s, 15 );
+            bs_skip( &s, 1 );
+            i_vbv_buffer_size = bs_read( &s, 15 ) << 3;
+            bs_skip( &s, 1 );
+            i_vbv_buffer_size += bs_read( &s, 3 );
+            i_vbv_occupancy = bs_read( &s, 11 ) << 15;
+            bs_skip( &s, 1 );
+            i_vbv_occupancy += bs_read( &s, 15 );
+            bs_skip( &s, 1 );
+
+            p_dec->fmt_out.i_bitrate = i_bitrate * 400;
+            p_dec->fmt_out.video.i_cpb_buffer = i_vbv_buffer_size * 16384;
+            p_dec->p_sys->i_vbv_occupancy = i_vbv_occupancy * 64;
         }
     }
     /* shape 0->RECT, 1->BIN, 2->BIN_ONLY, 3->GRAY */
