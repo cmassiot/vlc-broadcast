@@ -46,6 +46,8 @@
 
 #define SOUT_CFG_PREFIX "sout-x264-"
 
+#define DEFAULT_DELAY   500 /* ms */
+
 /*****************************************************************************
  * Module descriptor
  *****************************************************************************/
@@ -1231,7 +1233,7 @@ static int  Open ( vlc_object_t *p_this )
         p_sys->param.rc.b_stat_read = i_val & 2;
     }
 
-    if( !var_GetBool( p_enc, SOUT_CFG_PREFIX "mbtree" ) ) 
+    if( !var_GetBool( p_enc, SOUT_CFG_PREFIX "mbtree" ) )
        p_sys->param.rc.b_mb_tree = var_GetBool( p_enc, SOUT_CFG_PREFIX "mbtree" );
 
     /* We need to initialize pthreadw32 before we open the encoder,
@@ -1315,8 +1317,13 @@ static int  Open ( vlc_object_t *p_this )
     }
 
     p_enc->fmt_out.i_extra = i_extra;
-    p_enc->fmt_out.video.i_cpb_buffer = p_sys->param.rc.i_vbv_buffer_size
-                                         * 1000;
+
+#if X264_BUILD >= 89
+    if ( p_sys->param.i_nal_hrd == X264_NAL_HRD_CBR )
+        p_enc->fmt_out.video.i_cpb_buffer = p_sys->param.rc.i_vbv_buffer_size
+                                             * 1000;
+#endif
+
     switch ( p_sys->param.i_level_idc )
     {
     case 10:
@@ -1449,7 +1456,14 @@ static block_t *Encode( encoder_t *p_enc, picture_t *p_pict )
     p_block->i_pts = pic.i_pts + p_sys->i_initial_delay;
     p_block->i_dts = pic.i_dts + p_sys->i_initial_delay;
 
-    /* p_block->i_delay = FIXME */
+#if X264_BUILD >= 89
+    if ( p_enc->fmt_out.video.i_cpb_buffer )
+        p_block->i_delay = (pic.hrd_timing.cpb_removal_time
+                             - pic.hrd_timing.cpb_initial_arrival_time)
+                            * INT64_C(1000000);
+    else
+#endif
+        p_block->i_delay = DEFAULT_DELAY * 1000;
 
     return p_block;
 }
