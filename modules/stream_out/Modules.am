@@ -1,4 +1,4 @@
-SUBDIRS = transcode
+SUBDIRS = transcode ts
 
 SOURCES_stream_out_dummy = dummy.c
 SOURCES_stream_out_delay = delay.c
@@ -19,6 +19,8 @@ SOURCES_stream_out_setid = setid.c
 SOURCES_stream_out_setlang = setlang.c
 SOURCES_stream_out_langfromtelx = langfromtelx.c
 SOURCES_stream_out_cpb = cpb.c
+SOURCES_stream_out_udp = udp.c
+SOURCES_stream_out_file = file.c
 
 libvlc_LTLIBRARIES += \
 	libstream_out_dummy_plugin.la \
@@ -38,6 +40,8 @@ libvlc_LTLIBRARIES += \
 	libstream_out_setlang_plugin.la \
 	libstream_out_langfromtelx_plugin.la \
 	libstream_out_cpb_plugin.la \
+	libstream_out_udp_plugin.la \
+	libstream_out_file_plugin.la \
 	$(NULL)
 
 # RTP plugin

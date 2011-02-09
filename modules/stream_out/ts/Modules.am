@@ -1,0 +1,48 @@
+SOURCES_mux_ts_mux = mux.c \
+                 ts_packetizer.h \
+                 ts_input.h \
+                 ts_table.h \
+                 $(NULL)
+SOURCES_mux_ts_a52 = a52.c \
+                 $(NULL)
+SOURCES_mux_ts_dca = dca.c \
+                 $(NULL)
+SOURCES_mux_ts_mp4a = mp4a.c \
+                 $(NULL)
+SOURCES_mux_ts_mpga = mpga.c \
+                 $(NULL)
+SOURCES_mux_ts_dvbs = dvbs.c \
+                 $(NULL)
+SOURCES_mux_ts_telx = telx.c \
+                 $(NULL)
+SOURCES_mux_ts_video_mpeg = video-mpeg.c \
+                 $(NULL)
+SOURCES_mux_ts_video_private = video-private.c \
+                 $(NULL)
+SOURCES_mux_ts_pat = pat.c \
+                 $(NULL)
+SOURCES_mux_ts_pmt = pmt.c \
+                 $(NULL)
+SOURCES_mux_ts_nit = nit.c \
+                 $(NULL)
+SOURCES_mux_ts_sdt = sdt.c \
+                 $(NULL)
+SOURCES_mux_ts_tdt = tdt.c \
+                $(NULL)
+
+if HAVE_BITSTREAM
+libvlc_LTLIBRARIES += libmux_ts_mux_plugin.la \
+	libmux_ts_a52_plugin.la \
+	libmux_ts_dca_plugin.la \
+	libmux_ts_mp4a_plugin.la \
+	libmux_ts_mpga_plugin.la \
+	libmux_ts_dvbs_plugin.la \
+	libmux_ts_telx_plugin.la \
+	libmux_ts_video_mpeg_plugin.la \
+	libmux_ts_video_private_plugin.la \
+	libmux_ts_pat_plugin.la \
+	libmux_ts_pmt_plugin.la \
+	libmux_ts_nit_plugin.la \
+	libmux_ts_sdt_plugin.la \
+	libmux_ts_tdt_plugin.la
+endif

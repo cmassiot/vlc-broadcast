@@ -874,6 +874,13 @@ AS_IF([test -n "${PKG_CONFIG}" ],[
 
 
 dnl
+dnl Check for biTStream
+dnl
+AC_CHECK_HEADERS(bitstream/common.h, [have_bitstream=yes], [have_bitstream=no])
+AM_CONDITIONAL(HAVE_BITSTREAM, [test "${have_bitstream}" = "yes"])
+
+
+dnl
 dnl Check for zlib.h and -lz along with system -lminizip if available
 dnl
 AC_CHECK_HEADERS(zlib.h, [ have_zlib=yes ], [ have_zlib=no ])
@@ -4479,6 +4486,7 @@ AC_CONFIG_FILES([
   modules/stream_filter/Makefile
   modules/stream_out/Makefile
   modules/stream_out/transcode/Makefile
+  modules/stream_out/ts/Makefile
   modules/video_chroma/Makefile
   modules/video_filter/Makefile
   modules/video_filter/dynamicoverlay/Makefile
