@@ -1221,6 +1221,10 @@ static void SetupOutput( decoder_t *p_dec, block_t *p_block )
         p_sys->i_channels_conf & AOUT_CHAN_PHYSMASK;
 #endif
 
+    /* This is wrong for VBR, but anyway it's just an indication */
+    p_dec->fmt_out.i_bitrate = p_sys->i_frame_size * p_sys->i_rate * 8
+                                / p_sys->i_frame_length;
+
     p_block->i_pts = p_block->i_dts = date_Get( &p_sys->end_date );
 
     p_block->i_length =
