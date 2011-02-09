@@ -7,8 +7,8 @@
  * Authors: Christophe Massiot <massiot@via.ecp.fr>
  *
  * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
+ * it under the terms of the GNU Lesser General Public License as published by
+ * the Free Software Foundation; either version 2.1 of the License, or
  * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
@@ -16,9 +16,9 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
+ * You should have received a copy of the GNU Lesser General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111, USA.
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston MA 02110-1301, USA.
  *****************************************************************************/
 
 /*****************************************************************************
@@ -87,7 +87,6 @@ static int               Send( sout_stream_t *, sout_stream_id_t *, block_t * );
 
 struct sout_stream_sys_t
 {
-    sout_stream_t *p_out;
     int i_id;
     unsigned int i_bitrate;
     unsigned int i_cpb_buffer;
@@ -200,7 +199,7 @@ fail:
         id->b_cpb = false;
     }
 
-    id->id = p_sys->p_out->pf_add( p_sys->p_out, p_fmt );
+    id->id = p_stream->p_next->pf_add( p_stream->p_next, p_fmt );
     if ( id->id == NULL )
     {
         free( id );
@@ -217,7 +216,7 @@ static int Del( sout_stream_t *p_stream, sout_stream_id_t *id )
 {
     sout_stream_sys_t *p_sys = p_stream->p_sys;
 
-    p_sys->p_out->pf_del( p_sys->p_out, id->id );
+    p_stream->p_next->pf_del( p_stream->p_next, id->id );
     free( id );
 
     return VLC_SUCCESS;
@@ -269,10 +268,9 @@ static int Send( sout_stream_t *p_stream, sout_stream_id_t *id,
                 id->i_cpb_delay = p_sys->i_cpb_length;
             }
             p_buffer->i_delay = id->i_cpb_delay;
-
             p_buffer = p_next;
         }
     }
 
-    return p_sys->p_out->pf_send( p_sys->p_out, id->id, p_first );
+    return p_stream->p_next->pf_send( p_stream->p_next, id->id, p_first );
 }

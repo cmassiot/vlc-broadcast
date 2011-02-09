@@ -77,7 +77,6 @@ static int               Send  ( sout_stream_t *, sout_stream_id_t *, block_t * 
 
 struct sout_stream_sys_t
 {
-    sout_stream_t   *p_out;
     int i_id;
     char *psz_language;
 };
@@ -142,20 +141,16 @@ static sout_stream_id_t * Add( sout_stream_t *p_stream, es_format_t *p_fmt )
     }
 
 
-    return p_sys->p_out->pf_add( p_sys->p_out, p_fmt );
+    return p_stream->p_next->pf_add( p_stream->p_next, p_fmt );
 }
 
 static int Del( sout_stream_t *p_stream, sout_stream_id_t *id )
 {
-    sout_stream_sys_t *p_sys = (sout_stream_sys_t *)p_stream->p_sys;
-
-    return p_sys->p_out->pf_del( p_sys->p_out, id );
+    return p_stream->p_next->pf_del( p_stream->p_next, id );
 }
 
 static int Send( sout_stream_t *p_stream, sout_stream_id_t *id,
                  block_t *p_buffer )
 {
-    sout_stream_sys_t *p_sys = (sout_stream_sys_t *)p_stream->p_sys;
-
-    return p_sys->p_out->pf_send( p_sys->p_out, id, p_buffer );
+    return p_stream->p_next->pf_send( p_stream->p_next, id, p_buffer );
 }
