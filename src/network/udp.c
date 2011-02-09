@@ -634,6 +634,24 @@ static int net_SetDSCP( int fd, uint8_t dscp )
     return setsockopt( fd, level, cmd, &(int){ dscp }, sizeof (int));
 }
 
+#undef net_SetTOS
+/*****************************************************************************
+ * net_SetTOS:
+ *****************************************************************************
+ * Set the type of service field of the IP header of every outgoing packet.
+ *****************************************************************************/
+int net_SetTOS( vlc_object_t *p_this, int fd, uint8_t i_tos )
+{
+    if( setsockopt( fd, IPPROTO_IP, IP_TOS, &i_tos,
+                    sizeof( i_tos ) ) < 0 )
+    {
+        msg_Dbg( p_this, "Cannot set TOS (%s)", strerror(errno) );
+        return VLC_EGENERIC;
+    }
+
+    return VLC_SUCCESS;
+}
+
 #undef net_ConnectDgram
 /*****************************************************************************
  * net_ConnectDgram:

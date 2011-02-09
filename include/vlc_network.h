@@ -107,6 +107,10 @@ VLC_EXPORT( int, net_Accept, ( vlc_object_t *, int * ) );
 #define net_Accept(a, b) \
         net_Accept(VLC_OBJECT(a), b)
 
+VLC_EXPORT( int, net_SetTOS, ( vlc_object_t *p_this, int fd, uint8_t i_tos ) );
+#define net_SetTOS(a, b, c) \
+        net_SetTOS(VLC_OBJECT(a), b, c)
+
 VLC_EXPORT( int, net_ConnectDgram, ( vlc_object_t *p_this, const char *psz_host, int i_port, int hlim, int proto ) );
 #define net_ConnectDgram(a, b, c, d, e ) \
         net_ConnectDgram(VLC_OBJECT(a), b, c, d, e)
