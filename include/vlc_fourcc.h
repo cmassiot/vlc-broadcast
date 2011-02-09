@@ -340,6 +340,10 @@
 /* MPEG-I/II layer 3 audio */
 #define VLC_CODEC_MP3       VLC_FOURCC('m','p','3',' ')
 
+/* Non-codecs but still used internally as formats */
+#define VLC_CODEC_RTP       VLC_FOURCC('r','t','p',' ')
+#define VLC_CODEC_M2TS      VLC_FOURCC('m','2','t','s')
+
 /**
  * It returns the codec associated to a fourcc within a ES category.
  *
