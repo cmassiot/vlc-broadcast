@@ -63,6 +63,7 @@ void block_Init( block_t *restrict b, void *buf, size_t size )
     b->i_flags = 0;
     b->i_pts =
     b->i_dts = VLC_TS_INVALID;
+    b->i_delay = 0;
     b->i_length = 0;
     b->i_rate = 0;
     b->i_nb_samples = 0;
@@ -83,6 +84,7 @@ static void BlockMetaCopy( block_t *restrict out, const block_t *in )
     out->p_next    = in->p_next;
     out->i_dts     = in->i_dts;
     out->i_pts     = in->i_pts;
+    out->i_delay   = in->i_delay;
     out->i_flags   = in->i_flags;
     out->i_length  = in->i_length;
     out->i_rate    = in->i_rate;
@@ -486,22 +488,6 @@ block_t *block_File (int fd)
 /**
  * @section Thread-safe block queue functions
  */
-
-/**
- * Internal state for block queues
- */
-struct block_fifo_t
-{
-    vlc_mutex_t         lock;                         /* fifo data lock */
-    vlc_cond_t          wait;      /**< Wait for data */
-    vlc_cond_t          wait_room; /**< Wait for queue depth to shrink */
-
-    block_t             *p_first;
-    block_t             **pp_last;
-    size_t              i_depth;
-    size_t              i_size;
-    bool          b_force_wake;
-};
 
 block_fifo_t *block_FifoNew( void )
 {

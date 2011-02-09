@@ -82,6 +82,8 @@ typedef struct block_sys_t block_sys_t;
 #define BLOCK_FLAG_TOP_FIELD_FIRST 0x2000
 /** This block contains an interlaced picture with bottom field first */
 #define BLOCK_FLAG_BOTTOM_FIELD_FIRST 0x4000
+/** This block is aligned with the start of a unit */
+#define BLOCK_FLAG_ALIGNED       0x8000
 
 /** This block contains an interlaced picture */
 #define BLOCK_FLAG_INTERLACED_MASK \
@@ -306,6 +308,19 @@ static inline block_t *block_ChainGather( block_t *p_list )
  *
  * block_FifoGet and block_FifoShow are cancellation points.
  ****************************************************************************/
+
+struct block_fifo_t
+{
+    vlc_mutex_t         lock;                         /* fifo data lock */
+    vlc_cond_t          wait;      /**< Wait for data */
+    vlc_cond_t          wait_room; /**< Wait for queue depth to shrink */
+
+    block_t             *p_first;
+    block_t             **pp_last;
+    size_t              i_depth;
+    size_t              i_size;
+    bool          b_force_wake;
+};
 
 VLC_EXPORT( block_fifo_t *, block_FifoNew,      ( void ) LIBVLC_USED );
 VLC_EXPORT( void,           block_FifoRelease,  ( block_fifo_t * ) );
